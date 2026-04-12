@@ -1,35 +1,51 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
   const [huespedes, setHuespedes] = useState([]);
   const [habitaciones, setHabitaciones] = useState([]);
-  const [reservas, setReservas] = useState([]); // Estado para las reservas
+  const [reservas, setReservas] = useState([]); 
   const [nuevoH, setNuevoH] = useState({ dni: "", nombre: "", apellido: "" });
-  
-  // Para la nueva reserva
   const [selDni, setSelDni] = useState("");
   const [selHab, setSelHab] = useState({ id: "", numero: "" });
+  
+  const router = useRouter();
 
   const refresh = async () => {
-    const resHue = await fetch("http://localhost:8081/huespedes");
-    setHuespedes(await resHue.json());
-    const resHab = await fetch("http://localhost:8081/habitaciones");
-    setHabitaciones(await resHab.json());
-    const resRes = await fetch("http://localhost:8081/reservas");
-    setReservas(await resRes.json());
+    try {
+      const resHue = await fetch("http://localhost:8081/huespedes");
+      setHuespedes(await resHue.json());
+      
+      const resHab = await fetch("http://localhost:8081/habitaciones");
+      setHabitaciones(await resHab.json());
+      
+      const resRes = await fetch("http://localhost:8081/reservas");
+      setReservas(await resRes.json());
+    } catch (error) {
+      console.error("Error cargando datos:", error);
+    }
   };
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    const auth = localStorage.getItem("auth");
+    if (!auth) {
+      router.push("/login");
+    } else {
+      refresh();
+    }
+  }, [router]);
 
   const handleAlta = async (e: any) => {
     e.preventDefault();
     if(!nuevoH.dni || !nuevoH.nombre || !nuevoH.apellido) return alert("Completá todo");
+    
     const response = await fetch("http://localhost:8081/huespedes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(nuevoH),
     });
+
     if (response.ok) {
       alert("Huésped cargado");
       setNuevoH({ dni: "", nombre: "", apellido: "" });
@@ -44,8 +60,8 @@ export default function Home() {
       dni: selDni,
       habitacionId: selHab.id.toString(),
       numeroHab: selHab.numero,
-      desde: new Date().toISOString().split('T')[0], // Hoy
-      hasta: "2026-04-20" // Fecha de ejemplo
+      desde: new Date().toISOString().split('T')[0],
+      hasta: "2026-04-20" 
     };
 
     const res = await fetch("http://localhost:8081/reservas", {
@@ -64,13 +80,22 @@ export default function Home() {
     }
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem("auth");
+    router.push("/login");
+  };
+
   return (
     <main className="p-8 bg-slate-50 min-h-screen text-slate-900 font-sans">
       <div className="max-w-5xl mx-auto space-y-8">
-        <h1 className="text-4xl font-extrabold text-blue-900">Hotel Paraná</h1>
+        <div className="flex justify-between items-center">
+          <h1 className="text-4xl font-extrabold text-blue-900">Hotel Paraná</h1>
+          <button onClick={handleLogout} className="bg-red-100 text-red-600 px-4 py-2 rounded-lg font-bold hover:bg-red-200">
+            Cerrar Sesión
+          </button>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* ALTA */}
           <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
             <h2 className="text-xl font-bold mb-4">1. Registrar Huésped</h2>
             <form onSubmit={handleAlta} className="space-y-4">
@@ -81,7 +106,6 @@ export default function Home() {
             </form>
           </section>
 
-          {/* SELECCIÓN Y LOGICA */}
           <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
             <h2 className="text-xl font-bold mb-4">2. Crear Reserva</h2>
             <div className="space-y-4">
@@ -92,13 +116,12 @@ export default function Home() {
           </section>
         </div>
 
-        {/* LISTADOS INTERACTIVOS */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="bg-white p-6 rounded-xl border">
             <h2 className="font-bold mb-4">Huéspedes (Click para seleccionar)</h2>
-            <div className="divide-y">
+            <div className="divide-y max-h-60 overflow-y-auto">
               {huespedes.map((h: any) => (
-                <div key={h.dni} onClick={() => setSelDni(h.dni)} className={`py-2 cursor-pointer hover:bg-slate-50 ${selDni === h.dni ? 'bg-blue-50' : ''}`}>
+                <div key={h.dni} onClick={() => setSelDni(h.dni)} className={`py-2 px-2 cursor-pointer hover:bg-slate-50 ${selDni === h.dni ? 'bg-blue-50' : ''}`}>
                   {h.apellido}, {h.nombre} ({h.dni})
                 </div>
               ))}
@@ -107,7 +130,7 @@ export default function Home() {
 
           <div className="bg-white p-6 rounded-xl border">
             <h2 className="font-bold mb-4">Habitaciones (Click para seleccionar)</h2>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
               {habitaciones.map((hab: any) => (
                 <div key={hab.id} onClick={() => setSelHab({id: hab.id, numero: hab.numero})} 
                      className={`p-3 border rounded text-center cursor-pointer ${selHab.id === hab.id ? 'border-green-500 bg-green-50' : 'bg-slate-50'}`}>
@@ -118,29 +141,30 @@ export default function Home() {
           </div>
         </div>
 
-        {/* TABLA DE RESERVAS FINAL */}
         <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
           <h2 className="text-xl font-bold mb-4 text-blue-900">3. Cuadro de Reservas Actuales</h2>
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b">
-                <th className="py-2">Huésped</th>
-                <th className="py-2">Habitación</th>
-                <th className="py-2">Desde</th>
-                <th className="py-2">Hasta</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reservas.map((r: any) => (
-                <tr key={r.id} className="border-b text-sm">
-                  <td className="py-2">{r.huesped.nombre} {r.huesped.apellido}</td>
-                  <td className="py-2">N° {r.habitacion.numero}</td>
-                  <td className="py-2">{r.fechaInicio}</td>
-                  <td className="py-2">{r.fechaFin}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b">
+                  <th className="py-2">Huésped</th>
+                  <th className="py-2">Habitación</th>
+                  <th className="py-2">Desde</th>
+                  <th className="py-2">Hasta</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {reservas.map((r: any) => (
+                  <tr key={r.id} className="border-b text-sm">
+                    <td className="py-2">{r.huesped?.nombre} {r.huesped?.apellido}</td>
+                    <td className="py-2">N° {r.habitacion?.numero}</td>
+                    <td className="py-2">{r.fechaInicio}</td>
+                    <td className="py-2">{r.fechaFin}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       </div>
     </main>
