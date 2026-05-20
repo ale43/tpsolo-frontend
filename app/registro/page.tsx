@@ -9,7 +9,7 @@ export default function RegistroPage() {
   const router = useRouter();
 
   const handleRegistro = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault(); // Evita que la página se recargue sola al presionar Enter
 
     if (!user || !pass || !confirmPass) {
       return alert("Por favor, completá todos los campos.");
@@ -20,7 +20,6 @@ export default function RegistroPage() {
     }
 
     try {
-      // Le pega a tu controlador de Java en el puerto 8081 para crear el usuario
       const res = await fetch("http://localhost:8081/usuarios", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -44,6 +43,7 @@ export default function RegistroPage() {
         <h1 style={{ color: "#1e3a8a", marginBottom: "10px", fontSize: "24px", fontWeight: "bold" }}>Hotel Paraná</h1>
         <p style={{ color: "#64748b", marginBottom: "20px" }}>Crear una nueva cuenta</p>
         
+        {/* Formulario de Registro */}
         <form onSubmit={handleRegistro}>
           <input 
             type="text" 
@@ -77,7 +77,9 @@ export default function RegistroPage() {
           </button>
         </form>
 
+        {/* Botón para volver atrás */}
         <button 
+          type="button"
           onClick={() => router.push("/login")}
           style={{ width: "100%", padding: "12px", background: "transparent", color: "#2563eb", border: "1px solid #2563eb", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}
         >
