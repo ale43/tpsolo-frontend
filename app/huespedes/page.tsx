@@ -97,7 +97,7 @@ export default function BuscarHuespedesPage() {
         <div className="flex justify-between items-center border-b border-slate-200 pb-4">
           <div>
             <h1 className="text-3xl font-extrabold text-blue-950 tracking-tight">Módulo de Huéspedes</h1>
-            <p className="text-slate-500 text-sm mt-1">Buscador, Alta y Baja por Documento Nacional de Identidad</p>
+            <p className="text-slate-500 text-sm mt-1">Buscador, Alta, Baja y Modificación por Documento Nacional de Identidad</p>
           </div>
           <div className="flex gap-2">
             <button 
@@ -176,13 +176,24 @@ export default function BuscarHuespedesPage() {
                         <td className="p-3 text-slate-600 font-semibold">{h.dni}</td>
                         <td className="p-3 text-slate-500">{h.email || "[No Posee]"}</td>
                         <td className="p-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleEliminarHuesped(h.dni, nombreCompleto)}
-                            className="bg-red-100 text-red-700 px-3 py-1 rounded-lg font-bold text-xs hover:bg-red-200 transition"
-                          >
-                            ❌ Eliminar
-                          </button>
+                          <div className="flex gap-2 justify-center">
+                            {/* NUEVO BOTÓN DE MODIFICAR */}
+                            <button
+                              type="button"
+                              onClick={() => router.push(`/huespedes/${h.dni}`)}
+                              className="bg-amber-100 text-amber-700 px-3 py-1 rounded-lg font-bold text-xs hover:bg-amber-200 transition"
+                            >
+                              ✏️ Modificar
+                            </button>
+                            
+                            <button
+                              type="button"
+                              onClick={() => handleEliminarHuesped(h.dni, nombreCompleto)}
+                              className="bg-red-100 text-red-700 px-3 py-1 rounded-lg font-bold text-xs hover:bg-red-200 transition"
+                            >
+                              ❌ Eliminar
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

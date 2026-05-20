@@ -5,11 +5,14 @@ import { useRouter } from "next/navigation";
 export default function AltaHuespedPage() {
   const router = useRouter();
 
-  // Estados del formulario alineados con tus columnas de pgAdmin
+  // Estados del formulario
   const [nombre, setNombre] = useState("");
   const [apellido, setApellido] = useState("");
   const [dni, setDni] = useState("");
   const [email, setEmail] = useState("");
+  const [telefono, setTelefono] = useState("");
+  const [direccion, setDireccion] = useState("");
+  const [posicionIva, setPosicionIva] = useState("Consumidor Final");
 
   // Control de estados visuales
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -22,15 +25,21 @@ export default function AltaHuespedPage() {
     setExitoMsg(null);
     setGuardando(true);
 
-    const emailLimpio = email.trim();
+    // Validación básica en el cliente para evitar strings vacíos tramposos
+    if (!dni.trim() || isNaN(Number(dni.trim()))) {
+      setErrorMsg("Por favor, ingrese un número de DNI válido (solo números).");
+      setGuardando(false);
+      return;
+    }
 
-    // Payload adaptado a tus columnas reales de Postgres y entidad Huesped.java
     const huespedPayload = {
       nombre: nombre.trim(),
       apellido: apellido.trim(),
       dni: dni.trim(),
-      documento: dni.trim(), 
-      email: emailLimpio || null
+      email: email.trim() || null,
+      telefono: telefono.trim() || null,
+      direccion: direccion.trim() || null,
+      posicionIva: posicionIva
     };
 
     try {
@@ -52,12 +61,16 @@ export default function AltaHuespedPage() {
         setApellido("");
         setDni("");
         setEmail("");
+        setTelefono("");
+        setDireccion("");
+        setPosicionIva("Consumidor Final");
 
-        // Redirecciona al buscador general de huéspedes
+        // Redirección diferida al listado general
         setTimeout(() => router.push("/huespedes"), 2000);
       } else {
+        // Si el backend responde con un error 400 (DNI duplicado), el mensaje viaja por acá
         const errorTexto = await response.text();
-        setErrorMsg(errorTexto || `Error ${response.status}: El backend rechazó los datos del formulario.`);
+        setErrorMsg(errorTexto || `Error ${response.status}: El backend rechazó los datos.`);
       }
     } catch (error) {
       console.error("Error de conexión:", error);
@@ -71,7 +84,7 @@ export default function AltaHuespedPage() {
     <main className="p-8 bg-slate-50 min-h-screen text-slate-900 font-sans">
       <div className="max-w-xl mx-auto space-y-6">
         
-        {/* Cabecera con navegación doble */}
+        {/* Cabecera */}
         <div className="flex justify-between items-center border-b border-slate-200 pb-4">
           <div>
             <h1 className="text-3xl font-extrabold text-blue-950 tracking-tight">Registrar Huésped</h1>
@@ -95,43 +108,44 @@ export default function AltaHuespedPage() {
           </div>
         </div>
 
-        {/* Alertas */}
+        {/* Alertas dinámicas */}
         {errorMsg && (
-          <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl text-red-900 font-semibold text-sm">
-            Error: {errorMsg}
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl text-red-900 font-semibold text-sm transition-all shadow-xs">
+            ⚠️ {errorMsg}
           </div>
         )}
         {exitoMsg && (
-          <div className="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-xl text-emerald-900 font-semibold text-sm">
-            Éxito: {exitoMsg}
+          <div className="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-xl text-emerald-900 font-semibold text-sm transition-all shadow-xs">
+            ✅ {exitoMsg}
           </div>
         )}
 
-        {/* Formulario */}
-        <form onSubmit={handleCrearHuesped} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        {/* Formulario de carga */}
+        <form onSubmit={handleCrearHuesped} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
           
-          <div>
-            <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Nombre *</label>
-            <input
-              type="text"
-              required
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-              placeholder="Ej: Gustavo"
-              className="w-full border border-slate-300 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Apellido *</label>
-            <input
-              type="text"
-              required
-              value={apellido}
-              onChange={(e) => setApellido(e.target.value)}
-              placeholder="Ej: Pepinillo"
-              className="w-full border border-slate-300 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Nombre *</label>
+              <input
+                type="text"
+                required
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                placeholder="Ej: Gustavo"
+                className="w-full border border-slate-300 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Apellido *</label>
+              <input
+                type="text"
+                required
+                value={apellido}
+                onChange={(e) => setApellido(e.target.value)}
+                placeholder="Ej: Pepinillo"
+                className="w-full border border-slate-300 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition"
+              />
+            </div>
           </div>
 
           <div>
@@ -142,32 +156,68 @@ export default function AltaHuespedPage() {
               value={dni}
               onChange={(e) => setDni(e.target.value)}
               placeholder="Ej: 40903511"
-              className="w-full border border-slate-300 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full border border-slate-300 p-2.5 rounded-lg text-sm font-mono font-bold focus:ring-2 focus:ring-blue-500 outline-none transition"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Email de Contacto</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Ej: gustavo@gmail.com"
+                className="w-full border border-slate-300 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Teléfono</label>
+              <input
+                type="text"
+                value={telefono}
+                onChange={(e) => setTelefono(e.target.value)}
+                placeholder="Ej: 3434556677"
+                className="w-full border border-slate-300 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Dirección / Domicilio</label>
+            <input
+              type="text"
+              value={direccion}
+              onChange={(e) => setDireccion(e.target.value)}
+              placeholder="Ej: Urquiza 1234, Paraná"
+              className="w-full border border-slate-300 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Email de Contacto*</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Ej: gustavo@gmail.com"
-              className="w-full border border-slate-300 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                />
+            <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Posición Frente al IVA</label>
+            <select
+              value={posicionIva}
+              onChange={(e) => setPosicionIva(e.target.value)}
+              className="w-full border border-slate-300 p-2.5 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none transition"
+            >
+              <option value="Consumidor Final">Consumidor Final</option>
+              <option value="Responsable Inscripto">Responsable Inscripto</option>
+              <option value="Monotributista">Monotributista</option>
+              <option value="Exento">Exento</option>
+            </select>
           </div>
 
           <button
             type="submit"
             disabled={guardando}
-            className={`w-full text-white p-3 rounded-xl font-bold text-sm mt-2 shadow-md transition ${
-              guardando ? "bg-slate-400 cursor-not-allowed" : "bg-blue-900 hover:bg-blue-950"
+            className={`w-full text-white p-3 rounded-xl font-bold text-sm mt-2 shadow-md transition-all ${
+              guardando ? "bg-slate-400 cursor-not-allowed" : "bg-blue-900 hover:bg-blue-950 active:scale-[0.99]"
             }`}
           >
-            {guardando ? "Guardando Cambios..." : "Dar de Alta Pasajero"}
+            {guardando ? "Guardando Pasajero..." : "Dar de Alta Pasajero"}
           </button>
         </form>
-
       </div>
     </main>
   );

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 interface HuespedAuxiliar {
@@ -8,9 +8,19 @@ interface HuespedAuxiliar {
   apellido: string;
 }
 
+interface ReservaFront {
+  id: number;
+  fechaInicio: string;
+  fechaFin: string;
+  activa: boolean;
+  huesped: HuespedAuxiliar;
+  habitacion: { id: number };
+}
+
 export default function GestionReservasPage() {
   const router = useRouter();
 
+  // Estados del Formulario de Alta
   const [huespedId, setHuespedId] = useState("");
   const [habitacionNro, setHabitacionNro] = useState("");
   const [fechaDesde, setFechaDesde] = useState("");
@@ -19,9 +29,34 @@ export default function GestionReservasPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [exitoMsg, setExitoMsg] = useState<string | null>(null);
 
+  // Estados del Buscador Asistente
   const [terminoBusqueda, setTerminoBusqueda] = useState("");
   const [huespedesLista, setHuespedesLista] = useState<HuespedAuxiliar[]>([]);
   const [buscandoAux, setBuscandoAux] = useState(false);
+
+  // --- NUEVO: Estado para la Grilla de Reservas ---
+  const [reservasLista, setReservasLista] = useState<ReservaFront[]>([]);
+  const [cargandoGrilla, setCargandoGrilla] = useState(true);
+
+  // Función para cargar las reservas desde el Backend
+  const cargarReservasGrilla = async () => {
+    try {
+      const res = await fetch("http://localhost:8081/reservas");
+      if (res.ok) {
+        const datos: ReservaFront[] = await res.json();
+        setReservasLista(datos);
+      }
+    } catch (error) {
+      console.error("Error al traer la grilla de reservas:", error);
+    } finally {
+      setCargandoGrilla(false);
+    }
+  };
+
+  // Cargar las reservas al montar el componente
+  useEffect(() => {
+    cargarReservasGrilla();
+  }, []);
 
   const buscarHuespedesHelper = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,7 +91,6 @@ export default function GestionReservasPage() {
     }
 
     const numHabitacion = Number(habitacionNro);
-    // AQUÍ ESTÁ LA VALIDACIÓN DEL RANGO 1-10 QUE QUERÍAS
     if (isNaN(numHabitacion) || numHabitacion < 1 || numHabitacion > 10) {
       setErrorMsg("Por favor, ingrese un número de habitación válido entre 1 y 10.");
       return;
@@ -79,7 +113,8 @@ export default function GestionReservasPage() {
       if (response.ok) {
         setExitoMsg("Reserva creada con éxito.");
         setHuespedId(""); setHabitacionNro(""); setFechaDesde(""); setFechaHasta("");
-        setTimeout(() => router.push("/ocupacion"), 2000);
+        // Recargar la grilla automáticamente para ver la nueva reserva
+        cargarReservasGrilla();
       } else {
         const serverError = await response.text();
         setErrorMsg(serverError || "Error al crear la reserva.");
@@ -91,11 +126,13 @@ export default function GestionReservasPage() {
 
   return (
     <main className="p-8 bg-slate-50 min-h-screen text-slate-900 font-sans">
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-8">
+        
+        {/* Cabecera */}
         <div className="flex justify-between items-center border-b border-slate-200 pb-4">
           <div>
-            <h1 className="text-3xl font-extrabold text-blue-950 tracking-tight">Generar Nueva Reserva</h1>
-            <p className="text-slate-500 text-sm mt-1">Hotel Paraná - Habitaciones disponibles: 1 al 10</p>
+            <h1 className="text-3xl font-extrabold text-blue-950 tracking-tight">Gestión Integral de Reservas</h1>
+            <p className="text-slate-500 text-sm mt-1">Hotel Premier — Panel de Administración e Historial</p>
           </div>
           <button onClick={() => router.push("/")} className="bg-slate-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-slate-700 transition">
             Volver al Inicio
@@ -105,10 +142,11 @@ export default function GestionReservasPage() {
         {errorMsg && <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl text-red-900 font-semibold text-sm">{errorMsg}</div>}
         {exitoMsg && <div className="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-xl text-emerald-900 font-semibold text-sm">{exitoMsg}</div>}
 
+        {/* Zona del Formulario y Asistente */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           <div className="lg:col-span-2">
-            <form onSubmit={handleCrearReserva} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <h2 className="text-sm font-bold text-slate-700 border-b pb-2 mb-2">Datos de la Estadía</h2>
+            <form onSubmit={handleCrearReserva} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+              <h2 className="text-sm font-bold text-slate-700 border-b pb-2 mb-2">Generar Nueva Reserva</h2>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 uppercase mb-1">DNI del Huésped *</label>
@@ -129,17 +167,17 @@ export default function GestionReservasPage() {
                   <input type="date" required value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} className="w-full border border-slate-300 p-2 rounded-lg text-sm" />
                 </div>
               </div>
-              <button type="submit" className="w-full bg-blue-900 text-white p-3 rounded-xl font-bold hover:bg-blue-950 transition text-sm mt-2">Verificar y Confirmar</button>
+              <button type="submit" className="w-full bg-blue-900 text-white p-3 rounded-xl font-bold hover:bg-blue-950 transition text-sm mt-2">Verificar y Confirmar Reserva</button>
             </form>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
             <h3 className="text-sm font-bold text-slate-800">🔍 Asistente de Huéspedes</h3>
             <form onSubmit={buscarHuespedesHelper} className="flex gap-2">
               <input type="text" value={terminoBusqueda} onChange={(e) => setTerminoBusqueda(e.target.value)} placeholder="Filtrar... (presionar buscar para ver todos)" className="w-full border border-slate-300 p-2 rounded-lg text-xs" />
               <button type="submit" className="bg-slate-800 text-white text-xs px-3 py-2 rounded-lg font-bold">Buscar</button>
             </form>
-            <div className="border rounded-xl max-h-60 overflow-y-auto divide-y bg-slate-50">
+            <div className="border rounded-xl max-h-40 overflow-y-auto divide-y bg-slate-50">
               {huespedesLista.map((h) => (
                 <div key={h.dni} className="p-2.5 flex justify-between items-center text-xs">
                   <div className="font-bold">{h.apellido}, {h.nombre} <div className="text-slate-500 font-mono">DNI: {h.dni}</div></div>
@@ -149,6 +187,63 @@ export default function GestionReservasPage() {
             </div>
           </div>
         </div>
+
+        {/* --- NUEVA COLUMNA: GRILLA DE CONTROL DE RESERVAS --- */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+          <h2 className="text-base font-extrabold text-slate-800 mb-4 tracking-tight">📅 Grilla de Control de Reservas Ocupadas</h2>
+          
+          {cargandoGrilla ? (
+            <div className="text-center p-6 text-slate-500 text-sm">Cargando grilla desde el servidor...</div>
+          ) : reservasLista.length === 0 ? (
+            <div className="text-center p-6 bg-slate-50 border border-dashed rounded-xl text-slate-400 text-sm">No existen reservas registradas en el sistema actualmente.</div>
+          ) : (
+            <div className="overflow-x-auto border rounded-xl">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold">
+                    <th className="p-3">ID</th>
+                    <th className="p-3">Huésped (DNI)</th>
+                    <th className="p-3 text-center">Habitación</th>
+                    <th className="p-3">Check-In</th>
+                    <th className="p-3">Check-Out</th>
+                    <th className="p-3 text-center">Acciones del Sistema</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 bg-white text-slate-700 font-medium">
+                  {reservasLista.map((res) => (
+                    <tr key={res.id} className="hover:bg-slate-50 transition">
+                      <td className="p-3 font-mono font-bold text-blue-900">#{res.id}</td>
+                      <td className="p-3">
+                        <span className="font-bold block text-slate-900">{res.huesped ? `${res.huesped.apellido}, ${res.huesped.nombre}` : "N/A"}</span>
+                        <span className="text-slate-400 font-mono block text-[10px]">DNI: {res.huesped?.dni || "N/A"}</span>
+                      </td>
+                      <td className="p-3 text-center"><span className="bg-slate-100 px-2 py-1 rounded-md font-bold border border-slate-200">Hab {res.habitacion?.id}</span></td>
+                      <td className="p-3 font-mono">{res.fechaInicio}</td>
+                      <td className="p-3 font-mono">{res.fechaFin}</td>
+                      <td className="p-3 text-center">
+                        {/* BOTÓN CON REDIRECCIÓN DINÁMICA DE FACTURACIÓN */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (res.huesped?.dni) {
+                              router.push(`/reservas/${res.huesped.dni}/facturar`);
+                            } else {
+                              alert("Esta reserva no tiene un DNI de huésped válido.");
+                            }
+                          }}
+                          className="bg-blue-100 text-blue-800 px-3 py-1.5 rounded-lg font-bold text-xs hover:bg-blue-950 hover:text-white transition whitespace-nowrap"
+                        >
+                          🧾 Facturar Estadía
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
       </div>
     </main>
   );
