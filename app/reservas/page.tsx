@@ -2,247 +2,450 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-interface HuespedAuxiliar {
+interface Huesped {
   dni: string;
   nombre: string;
   apellido: string;
 }
 
-interface ReservaFront {
+interface Reserva {
   id: number;
   fechaInicio: string;
   fechaFin: string;
   activa: boolean;
-  huesped: HuespedAuxiliar;
+  huesped: Huesped;
   habitacion: { id: number };
+}
+
+interface Factura {
+  id: number;
+  huespedDni: string;
+  huespedNombre: string;
+  montoBase: number;
+  montoAdicionales: number;
+  descuentoAplicado: number;
+  montoTotal: number;
+  formaPago: string;
+  adicionalCochera: boolean;
+  adicionalFrigobar: boolean;
+  fechaEmision: string;
+  reserva: { id: number };
 }
 
 export default function GestionReservasPage() {
   const router = useRouter();
 
-  // Estados del Formulario de Alta
-  const [huespedId, setHuespedId] = useState("");
-  const [habitacionNro, setHabitacionNro] = useState("");
-  const [fechaDesde, setFechaDesde] = useState("");
-  const [fechaHasta, setFechaHasta] = useState("");
-  
+  const [reservasLista, setReservasLista] = useState<Reserva[]>([]);
+  const [huespedes, setHuespedes] = useState<Huesped[]>([]);
+  const [facturas, setFacturas] = useState<Factura[]>([]);
+  const [cargando, setCargando] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [exitoMsg, setExitoMsg] = useState<string | null>(null);
 
-  // Estados del Buscador Asistente
-  const [terminoBusqueda, setTerminoBusqueda] = useState("");
-  const [huespedesLista, setHuespedesLista] = useState<HuespedAuxiliar[]>([]);
-  const [buscandoAux, setBuscandoAux] = useState(false);
+  // Tab activo: "reservas" | "historial"
+  const [tabActivo, setTabActivo] = useState<"reservas" | "historial">("reservas");
 
-  // --- NUEVO: Estado para la Grilla de Reservas ---
-  const [reservasLista, setReservasLista] = useState<ReservaFront[]>([]);
-  const [cargandoGrilla, setCargandoGrilla] = useState(true);
+  // Estados del formulario
+  const [dniSeleccionado, setDniSeleccionado] = useState("");
+  const [habitacionId, setHabitacionId] = useState("1");
+  const [fechaInicio, setFechaInicio] = useState("");
+  const [fechaFin, setFechaFin] = useState("");
 
-  // Función para cargar las reservas desde el Backend
-  const cargarReservasGrilla = async () => {
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+
+  const estaVencida = (fechaFin: string) => new Date(fechaFin) < hoy;
+  const reservasVencidas = reservasLista.filter((r) => estaVencida(r.fechaFin));
+
+  // ─── Carga de datos ──────────────────────────────────────────────────────────
+  const cargarDatos = async () => {
+    setCargando(true);
     try {
-      const res = await fetch("http://localhost:8081/reservas");
-      if (res.ok) {
-        const datos: ReservaFront[] = await res.json();
-        setReservasLista(datos);
-      }
-    } catch (error) {
-      console.error("Error al traer la grilla de reservas:", error);
+      const [resReservas, resHuespedes, resFacturas] = await Promise.all([
+        fetch("http://localhost:8081/reservas"),
+        fetch("http://localhost:8081/huespedes"),
+        fetch("http://localhost:8081/facturas"),
+      ]);
+      if (resReservas.ok) setReservasLista(await resReservas.json());
+      if (resHuespedes.ok) setHuespedes(await resHuespedes.json());
+      if (resFacturas.ok) setFacturas(await resFacturas.json());
+    } catch {
+      setErrorMsg("Error de conexión con el servidor.");
     } finally {
-      setCargandoGrilla(false);
+      setCargando(false);
     }
   };
 
-  // Cargar las reservas al montar el componente
-  useEffect(() => {
-    cargarReservasGrilla();
-  }, []);
+  useEffect(() => { cargarDatos(); }, []);
 
-  const buscarHuespedesHelper = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBuscandoAux(true);
-    try {
-      const url = terminoBusqueda.trim()
-        ? `http://localhost:8081/huespedes/buscar?termino=${encodeURIComponent(terminoBusqueda.trim())}`
-        : `http://localhost:8081/huespedes`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const datos: HuespedAuxiliar[] = await res.json();
-        setHuespedesLista(datos);
-      }
-    } catch (error) {
-      console.error("Error:", error);
-    } finally {
-      setBuscandoAux(false);
-    }
+  const mostrarExito = (msg: string) => {
+    setExitoMsg(msg);
+    setTimeout(() => setExitoMsg(null), 4000);
+  };
+  const mostrarError = (msg: string) => {
+    setErrorMsg(msg);
+    setTimeout(() => setErrorMsg(null), 5000);
   };
 
+  // ─── Crear reserva ───────────────────────────────────────────────────────────
   const handleCrearReserva = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMsg(null);
-    setExitoMsg(null);
-
-    const desdeDate = new Date(fechaDesde);
-    const hastaDate = new Date(fechaHasta);
-
-    if (desdeDate >= hastaDate) {
-      setErrorMsg("La fecha 'Desde' debe ser anterior a la fecha 'Hasta'.");
+    if (new Date(fechaFin) <= new Date(fechaInicio)) {
+      mostrarError("La fecha de salida debe ser posterior a la de entrada.");
       return;
     }
-
-    const numHabitacion = Number(habitacionNro);
-    if (isNaN(numHabitacion) || numHabitacion < 1 || numHabitacion > 10) {
-      setErrorMsg("Por favor, ingrese un número de habitación válido entre 1 y 10.");
-      return;
-    }
-
-    const reservaPayload = {
-      huesped: { dni: huespedId.trim() },
-      habitacion: { id: numHabitacion },
-      fechaInicio: fechaDesde,
-      fechaFin: fechaHasta
+    const payload = {
+      huesped: { dni: dniSeleccionado },
+      habitacion: { id: parseInt(habitacionId) },
+      fechaInicio,
+      fechaFin,
     };
-
     try {
-      const response = await fetch("http://localhost:8081/reservas", {
+      const res = await fetch("http://localhost:8081/reservas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(reservaPayload),
+        body: JSON.stringify(payload),
       });
-
-      if (response.ok) {
-        setExitoMsg("Reserva creada con éxito.");
-        setHuespedId(""); setHabitacionNro(""); setFechaDesde(""); setFechaHasta("");
-        // Recargar la grilla automáticamente para ver la nueva reserva
-        cargarReservasGrilla();
+      if (res.ok) {
+        mostrarExito("Reserva creada con éxito.");
+        setDniSeleccionado(""); setFechaInicio(""); setFechaFin(""); setHabitacionId("1");
+        cargarDatos();
       } else {
-        const serverError = await response.text();
-        setErrorMsg(serverError || "Error al crear la reserva.");
+        const txt = await res.text();
+        mostrarError(txt || "Error al crear la reserva.");
       }
-    } catch (error) {
-      setErrorMsg("No se pudo conectar con el servidor.");
-    }
+    } catch { mostrarError("Error de conexión con el servidor."); }
   };
 
+  // ─── Eliminar una reserva ────────────────────────────────────────────────────
+  const handleEliminar = async (id: number) => {
+    if (!confirm(`¿Eliminar la reserva #${id}? Esta acción no se puede deshacer.`)) return;
+    try {
+      const res = await fetch(`http://localhost:8081/reservas/${id}`, { method: "DELETE" });
+      if (res.ok) { mostrarExito(`Reserva #${id} eliminada.`); cargarDatos(); }
+      else mostrarError("No se pudo eliminar. Puede tener facturas asociadas.");
+    } catch { mostrarError("Error de conexión al eliminar."); }
+  };
+
+  // ─── Eliminar TODAS las reservas vencidas ───────────────────────────────────
+  const handleEliminarVencidas = async () => {
+    if (reservasVencidas.length === 0) {
+      mostrarError("No hay reservas vencidas para eliminar.");
+      return;
+    }
+    if (!confirm(`¿Eliminar las ${reservasVencidas.length} reservas vencidas? Esta acción no se puede deshacer.`)) return;
+
+    let eliminadas = 0;
+    let errores = 0;
+    for (const r of reservasVencidas) {
+      try {
+        const res = await fetch(`http://localhost:8081/reservas/${r.id}`, { method: "DELETE" });
+        if (res.ok) eliminadas++;
+        else errores++;
+      } catch { errores++; }
+    }
+
+    if (errores === 0) mostrarExito(`${eliminadas} reservas vencidas eliminadas con éxito.`);
+    else mostrarExito(`${eliminadas} eliminadas. ${errores} no pudieron eliminarse (pueden tener facturas asociadas).`);
+    cargarDatos();
+  };
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────────
+  const formatARS = (n: number) =>
+    n?.toLocaleString("es-AR", { style: "currency", currency: "ARS" }) ?? "-";
+
+  const formatFecha = (iso: string) => {
+    if (!iso) return "-";
+    return new Date(iso).toLocaleString("es-AR", {
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  };
+
+  const badgePago = (forma: string) => {
+    const cls: Record<string, string> = {
+      EFECTIVO: "bg-emerald-100 text-emerald-700",
+      TARJETA: "bg-blue-100 text-blue-700",
+      CHEQUE: "bg-amber-100 text-amber-700",
+    };
+    const emoji: Record<string, string> = { EFECTIVO: "💵", TARJETA: "💳", CHEQUE: "🏢" };
+    return { cls: cls[forma] ?? "bg-slate-100 text-slate-600", emoji: emoji[forma] ?? "" };
+  };
+
+  // ─── Render ──────────────────────────────────────────────────────────────────
   return (
-    <main className="p-8 bg-slate-50 min-h-screen text-slate-900 font-sans">
-      <div className="max-w-6xl mx-auto space-y-8">
-        
-        {/* Cabecera */}
+    <main className="p-8 bg-slate-50 min-h-screen text-slate-900">
+      <div className="max-w-6xl mx-auto space-y-6">
+
+        {/* Header */}
         <div className="flex justify-between items-center border-b border-slate-200 pb-4">
-          <div>
-            <h1 className="text-3xl font-extrabold text-blue-950 tracking-tight">Gestión Integral de Reservas</h1>
-            <p className="text-slate-500 text-sm mt-1">Hotel Premier — Panel de Administración e Historial</p>
-          </div>
-          <button onClick={() => router.push("/")} className="bg-slate-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-slate-700 transition">
+          <h1 className="text-3xl font-bold text-blue-950">Gestión Integral de Reservas</h1>
+          <button onClick={() => router.push("/")}
+            className="bg-slate-600 text-white px-5 py-2 rounded-lg font-bold hover:bg-slate-800 transition text-sm">
             Volver al Inicio
           </button>
         </div>
 
-        {errorMsg && <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl text-red-900 font-semibold text-sm">{errorMsg}</div>}
-        {exitoMsg && <div className="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-xl text-emerald-900 font-semibold text-sm">{exitoMsg}</div>}
-
-        {/* Zona del Formulario y Asistente */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          <div className="lg:col-span-2">
-            <form onSubmit={handleCrearReserva} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-              <h2 className="text-sm font-bold text-slate-700 border-b pb-2 mb-2">Generar Nueva Reserva</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">DNI del Huésped *</label>
-                  <input type="text" required value={huespedId} onChange={(e) => setHuespedId(e.target.value)} className="w-full border border-slate-300 p-2 rounded-lg text-sm font-mono font-bold bg-slate-50 text-blue-950" placeholder="Ej: 38123456" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Número de Habitación *</label>
-                  <input type="number" required value={habitacionNro} onChange={(e) => setHabitacionNro(e.target.value)} className="w-full border border-slate-300 p-2 rounded-lg text-sm" placeholder="1 - 10" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Fecha Desde *</label>
-                  <input type="date" required value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} className="w-full border border-slate-300 p-2 rounded-lg text-sm" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Fecha Hasta *</label>
-                  <input type="date" required value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} className="w-full border border-slate-300 p-2 rounded-lg text-sm" />
-                </div>
-              </div>
-              <button type="submit" className="w-full bg-blue-900 text-white p-3 rounded-xl font-bold hover:bg-blue-950 transition text-sm mt-2">Verificar y Confirmar Reserva</button>
-            </form>
+        {/* Mensajes */}
+        {errorMsg && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg text-red-900 font-semibold text-sm">
+            ⚠️ {errorMsg}
           </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-800">🔍 Asistente de Huéspedes</h3>
-            <form onSubmit={buscarHuespedesHelper} className="flex gap-2">
-              <input type="text" value={terminoBusqueda} onChange={(e) => setTerminoBusqueda(e.target.value)} placeholder="Filtrar... (presionar buscar para ver todos)" className="w-full border border-slate-300 p-2 rounded-lg text-xs" />
-              <button type="submit" className="bg-slate-800 text-white text-xs px-3 py-2 rounded-lg font-bold">Buscar</button>
-            </form>
-            <div className="border rounded-xl max-h-40 overflow-y-auto divide-y bg-slate-50">
-              {huespedesLista.map((h) => (
-                <div key={h.dni} className="p-2.5 flex justify-between items-center text-xs">
-                  <div className="font-bold">{h.apellido}, {h.nombre} <div className="text-slate-500 font-mono">DNI: {h.dni}</div></div>
-                  <button type="button" onClick={() => setHuespedId(h.dni)} className="bg-blue-50 text-blue-700 px-2 py-1 rounded font-bold">Seleccionar</button>
-                </div>
-              ))}
-            </div>
+        )}
+        {exitoMsg && (
+          <div className="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-lg text-emerald-900 font-semibold text-sm">
+            ✅ {exitoMsg}
           </div>
+        )}
+
+        {/* Tabs */}
+        <div className="flex gap-2 border-b border-slate-200">
+          <button onClick={() => setTabActivo("reservas")}
+            className={`px-5 py-2.5 text-sm font-bold rounded-t-lg transition ${
+              tabActivo === "reservas"
+                ? "bg-white border border-b-white border-slate-200 text-blue-900"
+                : "text-slate-500 hover:text-slate-700"
+            }`}>
+            📋 Reservas
+            {reservasVencidas.length > 0 && (
+              <span className="ml-2 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                {reservasVencidas.length} vencidas
+              </span>
+            )}
+          </button>
+          <button onClick={() => setTabActivo("historial")}
+            className={`px-5 py-2.5 text-sm font-bold rounded-t-lg transition ${
+              tabActivo === "historial"
+                ? "bg-white border border-b-white border-slate-200 text-blue-900"
+                : "text-slate-500 hover:text-slate-700"
+            }`}>
+            🧾 Historial de Pagos
+            {facturas.length > 0 && (
+              <span className="ml-2 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-full">
+                {facturas.length}
+              </span>
+            )}
+          </button>
         </div>
 
-        {/* --- NUEVA COLUMNA: GRILLA DE CONTROL DE RESERVAS --- */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
-          <h2 className="text-base font-extrabold text-slate-800 mb-4 tracking-tight">📅 Grilla de Control de Reservas Ocupadas</h2>
-          
-          {cargandoGrilla ? (
-            <div className="text-center p-6 text-slate-500 text-sm">Cargando grilla desde el servidor...</div>
-          ) : reservasLista.length === 0 ? (
-            <div className="text-center p-6 bg-slate-50 border border-dashed rounded-xl text-slate-400 text-sm">No existen reservas registradas en el sistema actualmente.</div>
-          ) : (
-            <div className="overflow-x-auto border rounded-xl">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold">
+        {/* ── TAB: RESERVAS ─────────────────────────────────────────────────── */}
+        {tabActivo === "reservas" && (
+          <>
+            {/* Formulario nueva reserva */}
+            <form onSubmit={handleCrearReserva}
+              className="bg-white p-6 rounded-2xl border border-slate-300 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-4">
+              <h2 className="text-base font-extrabold text-slate-800 col-span-full">Nueva Reserva</h2>
+
+              <div className="flex flex-col gap-1">
+                <label className="font-bold text-sm text-slate-700">Huésped</label>
+                <select required value={dniSeleccionado} onChange={(e) => setDniSeleccionado(e.target.value)}
+                  className="border border-slate-400 p-2 rounded-lg text-slate-900 font-medium text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">Seleccione un huésped...</option>
+                  {huespedes.map((h) => (
+                    <option key={h.dni} value={h.dni}>{h.apellido}, {h.nombre} — DNI: {h.dni}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="font-bold text-sm text-slate-700">Habitación</label>
+                <select value={habitacionId} onChange={(e) => setHabitacionId(e.target.value)}
+                  className="border border-slate-400 p-2 rounded-lg text-slate-900 font-medium text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                  {[...Array(10)].map((_, i) => (
+                    <option key={i + 1} value={i + 1}>Habitación {i + 1}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="font-bold text-sm text-slate-700">Fecha de Entrada</label>
+                <input required type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)}
+                  className="border border-slate-400 p-2 rounded-lg font-medium text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="font-bold text-sm text-slate-700">Fecha de Salida</label>
+                <input required type="date" min={fechaInicio} value={fechaFin} onChange={(e) => setFechaFin(e.target.value)}
+                  className="border border-slate-400 p-2 rounded-lg font-medium text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+
+              <button type="submit"
+                className="bg-blue-700 text-white p-3 rounded-lg font-bold hover:bg-blue-900 col-span-full transition text-sm">
+                + Crear Reserva
+              </button>
+            </form>
+
+            {/* Alerta de vencidas */}
+            {reservasVencidas.length > 0 && (
+              <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-xl p-4">
+                <div>
+                  <p className="text-sm font-bold text-red-800">
+                    ⚠️ {reservasVencidas.length} reserva{reservasVencidas.length > 1 ? "s" : ""} vencida{reservasVencidas.length > 1 ? "s" : ""}
+                  </p>
+                  <p className="text-xs text-red-600 mt-0.5">
+                    Estas reservas tienen fecha de salida anterior a hoy.
+                  </p>
+                </div>
+                <button onClick={handleEliminarVencidas}
+                  className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-red-800 text-sm transition">
+                  Eliminar todas las vencidas
+                </button>
+              </div>
+            )}
+
+            {/* Grilla de reservas */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-300 shadow-sm">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-800 text-white">
+                  <tr>
                     <th className="p-3">ID</th>
-                    <th className="p-3">Huésped (DNI)</th>
-                    <th className="p-3 text-center">Habitación</th>
-                    <th className="p-3">Check-In</th>
-                    <th className="p-3">Check-Out</th>
-                    <th className="p-3 text-center">Acciones del Sistema</th>
+                    <th className="p-3">Huésped</th>
+                    <th className="p-3">Hab.</th>
+                    <th className="p-3">Fechas</th>
+                    <th className="p-3">Estado</th>
+                    <th className="p-3 text-center">Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 bg-white text-slate-700 font-medium">
-                  {reservasLista.map((res) => (
-                    <tr key={res.id} className="hover:bg-slate-50 transition">
-                      <td className="p-3 font-mono font-bold text-blue-900">#{res.id}</td>
-                      <td className="p-3">
-                        <span className="font-bold block text-slate-900">{res.huesped ? `${res.huesped.apellido}, ${res.huesped.nombre}` : "N/A"}</span>
-                        <span className="text-slate-400 font-mono block text-[10px]">DNI: {res.huesped?.dni || "N/A"}</span>
-                      </td>
-                      <td className="p-3 text-center"><span className="bg-slate-100 px-2 py-1 rounded-md font-bold border border-slate-200">Hab {res.habitacion?.id}</span></td>
-                      <td className="p-3 font-mono">{res.fechaInicio}</td>
-                      <td className="p-3 font-mono">{res.fechaFin}</td>
-                      <td className="p-3 text-center">
-                        {/* BOTÓN CON REDIRECCIÓN DINÁMICA DE FACTURACIÓN */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (res.huesped?.dni) {
-                              router.push(`/reservas/${res.huesped.dni}/facturar`);
-                            } else {
-                              alert("Esta reserva no tiene un DNI de huésped válido.");
-                            }
-                          }}
-                          className="bg-blue-100 text-blue-800 px-3 py-1.5 rounded-lg font-bold text-xs hover:bg-blue-950 hover:text-white transition whitespace-nowrap"
-                        >
-                          🧾 Facturar Estadía
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                <tbody className="divide-y divide-slate-200">
+                  {cargando ? (
+                    <tr><td colSpan={6} className="p-6 text-center text-slate-500">Cargando...</td></tr>
+                  ) : reservasLista.length === 0 ? (
+                    <tr><td colSpan={6} className="p-6 text-center text-slate-400">No hay reservas registradas.</td></tr>
+                  ) : (
+                    reservasLista.map((res) => {
+                      const vencida = estaVencida(res.fechaFin);
+                      return (
+                        <tr key={res.id} className={`transition ${vencida ? "bg-red-50" : "hover:bg-slate-50"}`}>
+                          <td className="p-3 font-extrabold text-blue-900">#{res.id}</td>
+                          <td className="p-3 font-semibold">
+                            {res.huesped?.apellido}, {res.huesped?.nombre}
+                            <span className="block text-xs text-slate-400 font-normal">DNI: {res.huesped?.dni}</span>
+                          </td>
+                          <td className="p-3 font-semibold">Hab. {res.habitacion?.id}</td>
+                          <td className="p-3 text-xs text-slate-600">
+                            {res.fechaInicio} → {res.fechaFin}
+                            {vencida && <span className="block text-red-500 font-bold mt-0.5">Vencida</span>}
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                              res.activa ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                            }`}>
+                              {res.activa ? "Activa" : "Facturada"}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex justify-center gap-2">
+                              <button
+                                onClick={() => router.push(`/reservas/${res.huesped?.dni}/facturar?reservaId=${res.id}`)}
+                                className="bg-blue-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-blue-800 text-xs transition">
+                                Facturar
+                              </button>
+                              <button
+                                onClick={() => handleEliminar(res.id)}
+                                className="bg-red-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-red-800 text-xs transition">
+                                Eliminar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
+          </>
+        )}
+
+        {/* ── TAB: HISTORIAL DE PAGOS ────────────────────────────────────────── */}
+        {tabActivo === "historial" && (
+          <div className="space-y-4">
+
+            {/* Resumen rápido */}
+            {facturas.length > 0 && (
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                  <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Total Recaudado</p>
+                  <p className="text-2xl font-extrabold text-blue-900 mt-1">
+                    {formatARS(facturas.reduce((acc, f) => acc + (f.montoTotal ?? 0), 0))}
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                  <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Facturas Emitidas</p>
+                  <p className="text-2xl font-extrabold text-blue-900 mt-1">{facturas.length}</p>
+                </div>
+                <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                  <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Promedio por Factura</p>
+                  <p className="text-2xl font-extrabold text-blue-900 mt-1">
+                    {formatARS(facturas.reduce((acc, f) => acc + (f.montoTotal ?? 0), 0) / facturas.length)}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-white p-6 rounded-2xl border border-slate-300 shadow-sm">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-800 text-white">
+                  <tr>
+                    <th className="p-3">ID</th>
+                    <th className="p-3">Reserva</th>
+                    <th className="p-3">Huésped</th>
+                    <th className="p-3">Forma de Pago</th>
+                    <th className="p-3">Adicionales</th>
+                    <th className="p-3">Descuento</th>
+                    <th className="p-3 text-right">Total</th>
+                    <th className="p-3">Fecha Emisión</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {cargando ? (
+                    <tr><td colSpan={8} className="p-6 text-center text-slate-500">Cargando...</td></tr>
+                  ) : facturas.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-10 text-center text-slate-400">
+                        <p className="text-3xl mb-2">🧾</p>
+                        <p className="font-semibold">Aún no hay facturas emitidas.</p>
+                        <p className="text-xs mt-1">Los pagos aparecerán aquí cuando se facture una reserva.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    facturas.map((f) => {
+                      const { cls, emoji } = badgePago(f.formaPago);
+                      return (
+                        <tr key={f.id} className="hover:bg-slate-50 transition">
+                          <td className="p-3 font-extrabold text-blue-900">#{f.id}</td>
+                          <td className="p-3 text-slate-600 font-mono">#{f.reserva?.id ?? "—"}</td>
+                          <td className="p-3 font-semibold">
+                            {f.huespedNombre}
+                            <span className="block text-xs text-slate-400 font-normal">DNI: {f.huespedDni}</span>
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${cls}`}>
+                              {emoji} {f.formaPago}
+                            </span>
+                          </td>
+                          <td className="p-3 text-xs text-slate-600">
+                            {[f.adicionalCochera && "🚗 Cochera", f.adicionalFrigobar && "🍶 Frigobar"]
+                              .filter(Boolean).join(", ") || "—"}
+                          </td>
+                          <td className="p-3 text-xs">
+                            {f.descuentoAplicado > 0
+                              ? <span className="text-emerald-600 font-bold">-{f.descuentoAplicado}%</span>
+                              : <span className="text-slate-400">—</span>}
+                          </td>
+                          <td className="p-3 text-right font-extrabold font-mono text-blue-900">
+                            {formatARS(f.montoTotal)}
+                          </td>
+                          <td className="p-3 text-xs text-slate-500">{formatFecha(f.fechaEmision)}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
       </div>
     </main>
