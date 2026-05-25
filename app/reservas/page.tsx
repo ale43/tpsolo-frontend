@@ -241,9 +241,11 @@ export default function GestionReservasPage() {
                 <select required value={dniSeleccionado} onChange={(e) => setDniSeleccionado(e.target.value)}
                   className="border border-slate-400 p-2 rounded-lg text-slate-900 font-medium text-sm outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">Seleccione un huésped...</option>
-                  {huespedes.map((h) => (
-                    <option key={h.dni} value={h.dni}>{h.apellido}, {h.nombre} — DNI: {h.dni}</option>
-                  ))}
+                  {huespedes
+                    .filter((h) => h.dni && h.dni.trim() !== "" && h.nombre && h.nombre.trim() !== "")
+                    .map((h) => (
+                      <option key={h.dni} value={h.dni}>{h.apellido}, {h.nombre} — DNI: {h.dni}</option>
+                    ))}
                 </select>
               </div>
 
