@@ -29,7 +29,8 @@ interface Factura {
   adicionalCochera: boolean;
   adicionalFrigobar: boolean;
   fechaEmision: string;
-  reserva: { id: number };
+  reserva: { id: number } | null;
+  reservaIdSnapshot: number | null;
 }
 
 export default function GestionReservasPage() {
@@ -416,7 +417,12 @@ export default function GestionReservasPage() {
                       return (
                         <tr key={f.id} className="hover:bg-slate-50 transition">
                           <td className="p-3 font-extrabold text-blue-900">#{f.id}</td>
-                          <td className="p-3 text-slate-600 font-mono">#{f.reserva?.id ?? "—"}</td>
+                          <td className="p-3 text-slate-600 font-mono">
+                            #{f.reserva?.id ?? f.reservaIdSnapshot ?? "—"}
+                            {!f.reserva && f.reservaIdSnapshot && (
+                              <span className="block text-[10px] text-slate-400 font-normal">(eliminada)</span>
+                            )}
+                          </td>
                           <td className="p-3 font-semibold">
                             {f.huespedNombre}
                             <span className="block text-xs text-slate-400 font-normal">DNI: {f.huespedDni}</span>
